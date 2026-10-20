@@ -1,4 +1,4 @@
-  export function createInput() {
+export function createInput() {
   const keys = { w: false, a: false, d: false };
   
   const handleKeyDown = (e) => {
@@ -12,9 +12,7 @@
   };
 
   const handleBlur = () => {
-    for (let key in keys) {
-      keys[key] = false;
-    }
+    for (let key in keys) keys[key] = false;
   };
 
   window.addEventListener('keydown', handleKeyDown);
