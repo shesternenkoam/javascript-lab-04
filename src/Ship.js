@@ -1,3 +1,4 @@
+import { eventBus } from './events.js';
 import { Entity } from './Entity.js';
 import { Vector2 } from './Vector2.js';
 import { Bullet } from './Bullet.js';
@@ -53,5 +54,6 @@ export class Ship extends Entity {
     if (e.code !== 'Space' || this.isDead) return; 
     const bulletVel = new Vector2(Math.cos(this.angle) * 500, Math.sin(this.angle) * 500);
     this.world.spawn(new Bullet(this.pos.clone(), bulletVel));
+    eventBus.dispatchEvent(new CustomEvent('fired'));
   }
 }

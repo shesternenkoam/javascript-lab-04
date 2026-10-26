@@ -1,128 +1,168 @@
 import './style.css';
+import { loadAll } from './assets/loader.js';
 import { createInput } from './input.js';
 import { World } from './World.js';
 import { Ship } from './Ship.js';
 import { Asteroid } from './Asteroid.js';
-import { Pickup } from './Pickup.js';
 import { applyHoming } from './components.js';
+import { initAudio } from './audio.js';
+import { Lobby } from './Lobby.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const dpr = window.devicePixelRatio || 1;
 const width = window.innerWidth;
 const height = window.innerHeight;
-canvas.width = width * dpr;
-canvas.height = height * dpr;
-canvas.style.width = width + 'px';
-canvas.style.height = height + 'px';
-ctx.scale(dpr, dpr);
+canvas.width = width;
+canvas.height = height;
 
-const world = new World(width, height);
-const ship = new Ship(width / 2, height / 2, world);
-world.spawn(ship);
+let globalAssets = null; // Сюди збережемо наші спрайти
+let gameStarted = false;
 
-// --- 1. СТАРТОВИЙ СПАВН (З'являються миттєво при завантаженні) ---
-for (let i = 0; i < 4; i++) {
-  world.spawn(new Asteroid(Math.random() * width, Math.random() * height));
+function drawLoadingScreen(progress, text = "Завантаження...") {
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = 'white';
+  ctx.font = '24px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, width / 2, height / 2 - 40);
+  ctx.strokeStyle = 'white';
+  ctx.strokeRect(width / 2 - 150, height / 2 - 10, 300, 20);
+  ctx.fillStyle = 'green';
+  ctx.fillRect(width / 2 - 150, height / 2 - 10, 300 * progress, 20);
 }
 
-const homingAst = new Asteroid(100, 100);
-applyHoming(homingAst, () => ship);
-world.spawn(homingAst);
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  
+  const world = new World(width, height);
+  const ship = new Ship(width / 2, height / 2, world);
+  world.spawn(ship);
 
-world.spawn(new Pickup(Math.random() * width, Math.random() * height));
-
-// --- 2. НЕСКІНЧЕННЕ ПОПОВНЕННЯ ВОРЕДІВ ТА БОНУСІВ ---
-setInterval(() => {
-  const astCount = Array.from(world.entities.values()).filter(e => e.kind === 'asteroid' && !e.isHoming && !e.isDead).length;
-  if (astCount < 6) {
+  for (let i = 0; i < 4; i++) {
     world.spawn(new Asteroid(Math.random() * width, Math.random() * height));
   }
-}, 3000);
 
-setInterval(() => {
-  const homingCount = Array.from(world.entities.values()).filter(e => e.kind === 'asteroid' && e.isHoming && !e.isDead).length;
-  if (homingCount < 2) {
-    const newHoming = new Asteroid(Math.random() * width, Math.random() * height);
-    applyHoming(newHoming, () => ship);
-    world.spawn(newHoming);
+  const getInput = createInput();
+  window.addEventListener('keydown', (e) => ship.fire(e));
+
+  let lastTime = performance.now();
+  let accumulator = 0;
+  const dt = 1 / 60;
+
+  function frame(time) {
+    const frameTime = (time - lastTime) / 1000;
+    lastTime = time;
+    accumulator += Math.min(frameTime, 0.1);
+
+    while (accumulator >= dt) {
+      world.step(dt, getInput());
+      accumulator -= dt;
+    }
+    
+    renderGame(world, ship);
+    requestAnimationFrame(frame);
   }
-}, 8000);
-
-setInterval(() => {
-  const pickupCount = Array.from(world.entities.values()).filter(e => e.kind === 'pickup' && !e.isDead).length;
-  if (pickupCount < 1) {
-    world.spawn(new Pickup(Math.random() * width, Math.random() * height));
-  }
-}, 12000);
-
-// --- 3. КЕРУВАННЯ ТА ІГРОВИЙ ЦИКЛ ---
-const getInput = createInput();
-window.addEventListener('keydown', (e) => ship.fire(e));
-
-let lastTime = performance.now();
-let accumulator = 0;
-const dt = 1 / 60;
-
-function frame(time) {
-  const frameTime = (time - lastTime) / 1000;
-  lastTime = time;
-  accumulator += Math.min(frameTime, 0.1);
-
-  while (accumulator >= dt) {
-    world.step(dt, getInput());
-    accumulator -= dt;
-  }
-  render();
   requestAnimationFrame(frame);
 }
 
-function render() {
+function renderGame(world, ship) {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, width, height);
 
   for (const entity of world.entities.values()) {
-    if (entity.kind === 'ship') {
-      ctx.save();
-      ctx.translate(entity.pos.x, entity.pos.y);
-      ctx.rotate(entity.angle);
-      ctx.beginPath();
-      ctx.moveTo(entity.radius, 0);
-      ctx.lineTo(-entity.radius, entity.radius * 0.8);
-      ctx.lineTo(-entity.radius, -entity.radius * 0.8);
-      ctx.closePath();
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
-    } else if (entity.kind === 'bullet') {
-      ctx.beginPath();
-      ctx.arc(entity.pos.x, entity.pos.y, entity.radius, 0, Math.PI * 2);
-      ctx.fillStyle = 'yellow';
-      ctx.fill();
-    } else if (entity.kind === 'asteroid') {
-      ctx.beginPath();
-      ctx.arc(entity.pos.x, entity.pos.y, entity.radius, 0, Math.PI * 2);
-      ctx.strokeStyle = entity.isHoming ? 'red' : 'gray'; 
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    } else if (entity.kind === 'particle') {
-      ctx.beginPath();
-      ctx.arc(entity.pos.x, entity.pos.y, entity.radius, 0, Math.PI * 2);
-      ctx.fillStyle = 'orange';
-      ctx.fill();
-    } else if (entity.kind === 'pickup') {
-      ctx.fillStyle = 'green';
-      ctx.fillRect(entity.pos.x - 10, entity.pos.y - 10, 20, 20);
-      ctx.fillStyle = 'white';
-      ctx.fillRect(entity.pos.x - 2, entity.pos.y - 8, 4, 16);
-      ctx.fillRect(entity.pos.x - 8, entity.pos.y - 2, 16, 4);
+    ctx.save();
+    ctx.translate(entity.pos.x, entity.pos.y);
+    ctx.rotate(entity.angle || 0);
+
+    if (entity.kind === 'ship' && globalAssets?.sprites?.ship) {
+      ctx.rotate(Math.PI / 2);
+      const img = globalAssets.sprites.ship;
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    } else if (entity.kind === 'asteroid' && globalAssets?.sprites?.asteroid) {
+
+      const img = globalAssets.sprites.asteroid;
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    } else {
+
+       ctx.beginPath();
+       ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);
+       ctx.fillStyle = entity.kind === 'bullet' ? 'yellow' : 'gray';
+       ctx.fill();
     }
+    ctx.restore();
   }
 
   ctx.fillStyle = 'white';
-  ctx.font = '24px Arial';
+  ctx.textAlign = 'left';
   ctx.fillText(`HP: ${ship.hp}`, 20, 40);
 }
 
-requestAnimationFrame(frame);
+async function bootstrap() {
+  const abortController = new AbortController();
+  
+
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContext();
+  
+  try {
+    drawLoadingScreen(0, "Ініціалізація...");
+    
+
+    const assets = await loadAll('/src/assets/manifest.json', {
+      signal: abortController.signal,
+      audioCtx: audioCtx, 
+      onProgress: (ratio) => drawLoadingScreen(ratio, `Завантаження... ${Math.round(ratio * 100)}%`)
+    });
+    
+    globalAssets = assets;
+    drawLoadingScreen(1, "Готово! Клікніть для старту");
+    
+
+    window.addEventListener('click', () => {
+
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+
+      initAudio(audioCtx, assets.sounds);
+      startGame();
+    }, { once: true });
+    
+  } catch (error) {
+    console.error("Помилка завантаження!", error);
+    drawLoadingScreen(0, "Помилка завантаження (див. консоль).");
+  }
+}
+
+function initLobby() {
+  const lobby = new Lobby();
+  const uiContainer = document.getElementById('lobby-ui');
+  const roomList = document.getElementById('room-list');
+
+  lobby.addEventListener('roomsChanged', (e) => {
+    const rooms = e.detail;
+    roomList.innerHTML = ''; 
+    
+    rooms.forEach(room => {
+      const btn = document.createElement('button');
+      btn.style.margin = '10px';
+      btn.style.padding = '10px 20px';
+      btn.style.fontSize = '18px';
+      btn.textContent = `Увійти: ${room.name} (${room.players} гравців)`;
+      
+      btn.onclick = () => {
+        lobby.leave(); 
+        uiContainer.style.display = 'none'; 
+        bootstrap(); 
+      };
+      
+      roomList.appendChild(btn);
+    });
+  });
+
+  lobby.start();
+}
+
+initLobby();
