@@ -80,11 +80,9 @@ function renderGame(world, ship) {
       const img = globalAssets.sprites.ship;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
     } else if (entity.kind === 'asteroid' && globalAssets?.sprites?.asteroid) {
-
       const img = globalAssets.sprites.asteroid;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
     } else {
-
        ctx.beginPath();
        ctx.arc(0, 0, entity.radius, 0, Math.PI * 2);
        ctx.fillStyle = entity.kind === 'bullet' ? 'yellow' : 'gray';
@@ -98,16 +96,14 @@ function renderGame(world, ship) {
   ctx.fillText(`HP: ${ship.hp}`, 20, 40);
 }
 
-async function bootstrap() {
+async function bootstrap(roomData) {
   const abortController = new AbortController();
-  
 
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const audioCtx = new AudioContext();
   
   try {
     drawLoadingScreen(0, "Ініціалізація...");
-    
 
     const assets = await loadAll('/src/assets/manifest.json', {
       signal: abortController.signal,
@@ -118,14 +114,11 @@ async function bootstrap() {
     globalAssets = assets;
     drawLoadingScreen(1, "Готово! Клікніть для старту");
     
-
     window.addEventListener('click', () => {
-
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
       }
       
-
       initAudio(audioCtx, assets.sounds);
       startGame();
     }, { once: true });
@@ -139,27 +132,20 @@ async function bootstrap() {
 function initLobby() {
   const lobby = new Lobby();
   const uiContainer = document.getElementById('lobby-ui');
-  const roomList = document.getElementById('room-list');
 
-  lobby.addEventListener('roomsChanged', (e) => {
-    const rooms = e.detail;
-    roomList.innerHTML = ''; 
-    
-    rooms.forEach(room => {
-      const btn = document.createElement('button');
-      btn.style.margin = '10px';
-      btn.style.padding = '10px 20px';
-      btn.style.fontSize = '18px';
-      btn.textContent = `Увійти: ${room.name} (${room.players} гравців)`;
-      
-      btn.onclick = () => {
-        lobby.leave(); 
-        uiContainer.style.display = 'none'; 
-        bootstrap(); 
-      };
-      
-      roomList.appendChild(btn);
-    });
+  lobby.addEventListener('join', (e) => {
+    const { room, name } = e.detail;
+    console.log(`Гравець ${name} увійшов у кімнату ${room}`);
+
+    if (uiContainer) {
+      uiContainer.style.display = 'none';
+    }
+
+    if (canvas) {
+      canvas.style.display = 'block';
+    }
+
+    bootstrap(e.detail);
   });
 
   lobby.start();
